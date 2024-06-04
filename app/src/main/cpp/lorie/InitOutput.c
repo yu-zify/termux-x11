@@ -537,13 +537,13 @@ lorieRandRInit(ScreenPtr pScreen) {
         || !(crtc = RRCrtcCreate(pScreen, NULL))
         || !RRCrtcGammaSetSize(crtc, 256)
         || !(output = RROutputCreate(pScreen, screenName, sizeof(screenName), NULL))
-        //  || (output->nameLength = strlen(output->name), FalseNoop())
+        || (output->nameLength = strlen(output->name), FalseNoop())
         || !RROutputSetClones(output, NULL, 0)
         || !RROutputSetModes(output, &mode, 1, 0)
         || !RROutputSetCrtcs(output, &crtc, 1)
         || !RROutputSetConnection(output, RR_Connected)
         || !RRCrtcNotify(crtc, mode, 0, 0, RR_Rotate_0, NULL, 1, &output))
-        return FALSE;
+        return TRUE;
     return TRUE;
 }
 
