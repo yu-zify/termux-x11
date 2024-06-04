@@ -543,7 +543,7 @@ lorieRandRInit(ScreenPtr pScreen) {
         || !RROutputSetCrtcs(output, &crtc, 1)
         || !RROutputSetConnection(output, RR_Connected)
         || !RRCrtcNotify(crtc, mode, 0, 0, RR_Rotate_0, NULL, 1, &output))
-        return TRUE;
+        return FALSE;
     return TRUE;
 }
 
@@ -608,12 +608,12 @@ CursorForDevice(DeviceIntPtr pDev) {
 }
 
 Bool lorieChangeScreenName(unused ClientPtr pClient, void *closure) {
-    RROutputPtr output = RRFirstOutput(pScreenPtr);
+  /*  RROutputPtr output = RRFirstOutput(pScreenPtr);
     memset(output->name, 0, 1024);
     strncpy(output->name, closure, 1024);
     output->name[1023] = '\0';
     output->nameLength = strlen(output->name);
-    free(closure);
+    free(closure);*/
     return TRUE;
 }
 
