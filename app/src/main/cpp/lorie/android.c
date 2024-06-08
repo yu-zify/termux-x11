@@ -251,11 +251,11 @@ Java_com_termux_x11_CmdEntryPoint_start(JNIEnv *env, unused jclass cls, jobjectA
 
 JNIEXPORT void JNICALL
 Java_com_termux_x11_CmdEntryPoint_windowChanged(JNIEnv *env, unused jobject cls, jobject surface, jstring jname) {
-    const char *name = !jname ? NULL : (*env)->GetStringUTFChars(env, jname, JNI_FALSE);
+ /*   const char *name = !jname ? NULL : (*env)->GetStringUTFChars(env, jname, JNI_FALSE);
     QueueWorkProc(lorieChangeScreenName, NULL, name ? strndup(name, 1024) : strdup("screen"));
     if (name)
         (*env)->ReleaseStringUTFChars(env, jname, name);
-
+*/
     QueueWorkProc(lorieChangeWindow, NULL, surface ? (*env)->NewGlobalRef(env, surface) : NULL);
 }
 
