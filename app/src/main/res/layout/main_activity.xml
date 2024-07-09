@@ -253,7 +253,7 @@
         </LinearLayout>
 
         <Button
-                android:id="@+id/mouse_button_middle_click"
+                android:id="@+id/button_ctrl"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:minWidth="48dp"
@@ -287,7 +287,7 @@
             tools:ignore="HardcodedText,PxUsage,SmallSp" />
 
         <Button
-                android:id="@+id/mouse_button_middle_click"
+                android:id="@+id/button_alt"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:minWidth="48dp"
