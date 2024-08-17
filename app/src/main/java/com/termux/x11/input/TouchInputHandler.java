@@ -482,6 +482,7 @@ public class TouchInputHandler {
             case "toggle additional key bar": return (down) -> { if (down) mActivity.toggleExtraKeys(); };
             case "open preferences": return (down) -> { if (down) mActivity.startActivity(new Intent(mActivity, LoriePreferences.class) {{ setAction(Intent.ACTION_MAIN); }}); };
             case "release pointer and keyboard capture": return (down) -> { if (down) setCapturingEnabled(false); };
+            case "toggle fullscreen": return (down) -> { if (down) MainActivity.prefs.fullscreen.put(!MainActivity.prefs.fullscreen.get()); };
             case "exit": return (down) -> { if (down) mActivity.finish(); };
             case "send volume up": return (down) -> mActivity.getLorieView().sendKeyEvent(0, KEYCODE_VOLUME_UP, down);
             case "send volume down": return (down) -> mActivity.getLorieView().sendKeyEvent(0, KEYCODE_VOLUME_DOWN, down);
@@ -501,6 +502,9 @@ public class TouchInputHandler {
                     setPackage(mActivity.getPackageName());
                     setAction(Intent.ACTION_MAIN);
                 }}, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            case "restart activity":
+                return PendingIntent.getActivity(mActivity, requestCode,
+                        Intent.makeRestartActivityTask(mActivity.getComponentName()), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             case "exit":
             case "toggle soft keyboard":
             case "toggle additional key bar":
@@ -513,19 +517,15 @@ public class TouchInputHandler {
         }
     }
 
+    @SuppressLint("DiscouragedApi")
     public String extractTitleFromPreferences(Prefs p, String name) {
         LoriePreferences.PrefsProto.Preference pref = p.keys.get(name + "Action");
         if (pref == null)
             return null;
 
-        switch(pref.asList().get()) {
-            case "open preferences": return "Preferences";
-            case "exit": return "Exit";
-            case "toggle soft keyboard": return "Toggle IME";
-            case "toggle additional key bar": return "Toggle additional keyboard";
-            case "release pointer and keyboard capture": return "Release captures";
-            default: return null;
-        }
+        String key = pref.asList().get().replace(' ', '_');
+        int id = mActivity.getResources().getIdentifier("notification_" + key, "string", mActivity.getPackageName());
+        return id == 0 ? null : mActivity.getResources().getString(id);
     }
 
     public NotificationCompat.Builder setupNotification(Prefs prefs, NotificationCompat.Builder builder) {

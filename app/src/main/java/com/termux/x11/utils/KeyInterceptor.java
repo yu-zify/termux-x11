@@ -3,6 +3,8 @@ package com.termux.x11.utils;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
@@ -17,8 +19,10 @@ import java.util.LinkedHashSet;
 public class KeyInterceptor extends AccessibilityService {
     LinkedHashSet<Integer> pressedKeys = new LinkedHashSet<>();
 
+    private static final Handler handler = new Handler(Looper.getMainLooper());
     private static KeyInterceptor self;
-    private static boolean enabledAutomatically = false;
+    private static boolean launchedAutomatically = false;
+    private boolean enabled = false;
 
     public KeyInterceptor() {
         self = this;
@@ -28,7 +32,7 @@ public class KeyInterceptor extends AccessibilityService {
         try {
             Settings.Secure.putString(ctx.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, "com.termux.x11/.utils.KeyInterceptor");
             Settings.Secure.putString(ctx.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, "1");
-            enabledAutomatically = true;
+            launchedAutomatically = true;
         } catch (SecurityException e) {
             new AlertDialog.Builder(ctx)
                     .setTitle("Permission denied")
@@ -44,7 +48,7 @@ public class KeyInterceptor extends AccessibilityService {
     }
 
     public static void shutdown(boolean onlyIfEnabledAutomatically) {
-        if (onlyIfEnabledAutomatically && !enabledAutomatically)
+        if (onlyIfEnabledAutomatically && !launchedAutomatically)
             return;
 
         if (self != null) {
@@ -54,9 +58,35 @@ public class KeyInterceptor extends AccessibilityService {
         }
     }
 
-    public static boolean isEnabled() {
+    public static boolean isLaunched() {
         AccessibilityServiceInfo info = self == null ? null : self.getServiceInfo();
         return info != null && info.getId() != null;
+    }
+
+    private static final Runnable disableImmediatelyCallback = KeyInterceptor::disableImmediately;
+    private static void disableImmediately() {
+        if (self == null)
+            return;
+
+        android.util.Log.d("KeyInterceptor", "disabling interception service");
+        self.setServiceInfo(new AccessibilityServiceInfo() {{ flags = DEFAULT; }});
+        self.enabled = false;
+    }
+
+    public static void recheck() {
+        MainActivity a = MainActivity.getInstance();
+        boolean shouldBeEnabled = (a != null && self != null) && (a.hasWindowFocus() || !self.pressedKeys.isEmpty());
+        if (self != null && shouldBeEnabled != self.enabled) {
+            if (shouldBeEnabled) {
+                handler.removeCallbacks(disableImmediatelyCallback);
+                android.util.Log.d("KeyInterceptor", "enabling interception service");
+                self.setServiceInfo(new AccessibilityServiceInfo() {{ flags = FLAG_REQUEST_FILTER_KEY_EVENTS; }});
+                self.enabled = true;
+            } else
+                // In the case if service info is changed Android current dragging processes
+                // so it is impossible to pull notification bar or call recents screen by swiping activity up.
+                handler.postDelayed(disableImmediatelyCallback, 120000);
+        }
     }
 
     @Override
@@ -80,19 +110,14 @@ public class KeyInterceptor extends AccessibilityService {
         if (event.getAction() == KeyEvent.ACTION_UP)
             pressedKeys.remove(event.getKeyCode());
 
+        recheck();
+
         return ret;
     }
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent e) {
-        // Disable self if it is automatically started on device boot or when activity finishes.
-        if (MainActivity.getInstance() == null || MainActivity.getInstance().isFinishing()) {
-            android.util.Log.d("KeyInterceptor", "finishing");
-            shutdown(false);
-        }
-    }
+    public void onAccessibilityEvent(AccessibilityEvent e) {}
 
     @Override
-    public void onInterrupt() {
-    }
+    public void onInterrupt() {}
 }

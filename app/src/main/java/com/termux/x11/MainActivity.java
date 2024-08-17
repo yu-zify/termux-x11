@@ -70,7 +70,6 @@ import com.termux.x11.utils.TermuxX11ExtraKeys;
 import com.termux.x11.utils.X11ToolbarViewPager;
 
 import java.util.Map;
-import java.util.Objects;
 
 @SuppressLint("ApplySharedPref")
 @SuppressWarnings({"deprecation", "unused"})
@@ -96,8 +95,7 @@ public class MainActivity extends AppCompatActivity implements View.OnApplyWindo
 
     public static Prefs prefs = null;
 
-    private static boolean oldFullscreen = false;
-    private static boolean oldHideCutout = false;
+    private static boolean oldFullscreen = false, oldHideCutout = false, oldXrMode = false;
     private final SharedPreferences.OnSharedPreferenceChangeListener preferencesChangedListener = (__, key) -> onPreferencesChanged(key);
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
@@ -108,17 +106,7 @@ public class MainActivity extends AppCompatActivity implements View.OnApplyWindo
             if (ACTION_START.equals(intent.getAction())) {
                 try {
                     Log.v("LorieBroadcastReceiver", "Got new ACTION_START intent");
-                    IBinder b = Objects.requireNonNull(intent.getBundleExtra("")).getBinder("");
-                    service = ICmdEntryInterface.Stub.asInterface(b);
-                    Objects.requireNonNull(service).asBinder().linkToDeath(() -> {
-                        service = null;
-                        CmdEntryPoint.requestConnection();
-
-                        Log.v("Lorie", "Disconnected");
-                        runOnUiThread(() -> clientConnectedStateChanged(false));
-                    }, 0);
-
-                    onReceiveConnection();
+                    onReceiveConnection(intent);
                 } catch (Exception e) {
                     Log.e("MainActivity", "Something went wrong while we extracted connection details from binder.", e);
                 }
@@ -162,6 +150,7 @@ public class MainActivity extends AppCompatActivity implements View.OnApplyWindo
 
         oldFullscreen = prefs.fullscreen.get();
         oldHideCutout = prefs.hideCutout.get();
+        oldXrMode = prefs.xrMode.get();
 
         prefs.get().registerOnSharedPreferenceChangeListener(preferencesChangedListener);
 
@@ -247,6 +236,8 @@ public class MainActivity extends AppCompatActivity implements View.OnApplyWindo
                 && !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
             requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 0);
         }
+
+        onReceiveConnection(getIntent());
     }
 
     @Override
@@ -474,7 +465,23 @@ public class MainActivity extends AppCompatActivity implements View.OnApplyWindo
         });
     }
 
-    void onReceiveConnection() {
+    void onReceiveConnection(Intent intent) {
+        Bundle bundle = intent == null ? null : intent.getBundleExtra(null);
+        IBinder ibinder = bundle == null ? null : bundle.getBinder(null);
+        if (ibinder == null)
+            return;
+
+        service = ICmdEntryInterface.Stub.asInterface(ibinder);
+        try {
+            service.asBinder().linkToDeath(() -> {
+                service = null;
+                CmdEntryPoint.requestConnection();
+
+                Log.v("Lorie", "Disconnected");
+                runOnUiThread(() -> clientConnectedStateChanged(false));
+            }, 0);
+        } catch (RemoteException ignored) {}
+
         try {
             if (service != null && service.asBinder().isBinderAlive()) {
                 Log.v("LorieBroadcastReceiver", "Extracting logcat fd.");
@@ -483,6 +490,9 @@ public class MainActivity extends AppCompatActivity implements View.OnApplyWindo
                     LorieView.startLogcat(logcatOutput.detachFd());
 
                 tryConnect();
+
+                if (intent != getIntent())
+                    getIntent().putExtra(null, bundle);
             }
         } catch (Exception e) {
             Log.e("MainActivity", "Something went wrong while we were establishing connection", e);
@@ -512,18 +522,40 @@ public class MainActivity extends AppCompatActivity implements View.OnApplyWindo
     }
 
     void onPreferencesChanged(String key) {
-        prefs.recheckStoringSecondaryDisplayPreferences();
-
         if ("additionalKbdVisible".equals(key))
             return;
 
+        handler.removeCallbacks(this::onPreferencesChangedCallback);
+        handler.postDelayed(this::onPreferencesChangedCallback, 100);
+    }
+
+    /** @noinspection CommentedOutCode*/
+    @SuppressLint("UnsafeIntentLaunch")
+    void onPreferencesChangedCallback() {
+        prefs.recheckStoringSecondaryDisplayPreferences();
+
+        if (oldXrMode != prefs.xrMode.get() && XrActivity.isSupported()) {
+            getBaseContext().startActivity(new Intent(this, MainActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+
+            if (oldXrMode) {
+                // XR process and 2D preferences screen are two different processes.
+                // To close XR, it is needed to do it using a broadcast.
+                Intent intent = new Intent(XrActivity.ACTION_STOP_XR);
+                intent.setPackage(getPackageName());
+                getBaseContext().sendBroadcast(intent);
+            }
+            finish();
+            return;
+        }
+
+        onWindowFocusChanged(hasWindowFocus());
         LorieView lorieView = getLorieView();
 
         mInputHandler.reloadPreferences(prefs);
         lorieView.reloadPreferences(prefs);
 
         setTerminalToolbarView();
-        onWindowFocusChanged(hasWindowFocus());
 
         lorieView.triggerCallback();
 
@@ -635,7 +667,7 @@ public class MainActivity extends AppCompatActivity implements View.OnApplyWindo
         NotificationCompat.Builder builder =  new NotificationCompat.Builder(this, getNotificationChannel(mNotificationManager))
                 .setContentTitle("Termux:X11")
                 .setSmallIcon(R.drawable.ic_x11_icon)
-                .setContentText("Pull down to show options")
+                .setContentText(getResources().getText(R.string.notification_content_text))
                 .setOngoing(true)
                 .setPriority(Notification.PRIORITY_MAX)
                 .setSilent(true)
@@ -673,6 +705,7 @@ public class MainActivity extends AppCompatActivity implements View.OnApplyWindo
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        KeyInterceptor.recheck();
         prefs.recheckStoringSecondaryDisplayPreferences();
         Window window = getWindow();
         View decorView = window.getDecorView();
